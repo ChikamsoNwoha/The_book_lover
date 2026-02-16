@@ -55,6 +55,8 @@ CREATE TABLE `articles` (
   `id` int NOT NULL AUTO_INCREMENT,
   `title` varchar(255) DEFAULT NULL,
   `content` text,
+  `quote` text,
+  `image_url` varchar(500) DEFAULT NULL,
   `category` enum('ENTREPRENEURSHIP','FASHION') NOT NULL,
   `views` int DEFAULT '0',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,

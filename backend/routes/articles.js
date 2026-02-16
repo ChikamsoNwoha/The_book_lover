@@ -1,5 +1,8 @@
 // routes/articles.js
 const express = require('express');
+const path = require('path');
+const fs = require('fs/promises');
+const multer = require('multer');
 const router = express.Router();
 const adminAuth = require('../middleware/adminAuth');
 const db = require('../db');
@@ -7,10 +10,87 @@ const db = require('../db');
 const ALLOWED_CATEGORIES = ['ENTREPRENEURSHIP', 'FASHION'];
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
+const UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'articles');
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
 
 // Helper to send error response
 const sendError = (res, status, message) => {
   res.status(status).json({ error: message });
+};
+
+const ensureUploadDir = async () => {
+  await fs.mkdir(UPLOAD_DIR, { recursive: true });
+};
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    ensureUploadDir()
+      .then(() => cb(null, UPLOAD_DIR))
+      .catch((err) => cb(err));
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const fallbackExt =
+      file.mimetype === 'image/png'
+        ? '.png'
+        : file.mimetype === 'image/webp'
+          ? '.webp'
+          : '.jpg';
+    const safeExt = ext || fallbackExt;
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`;
+    cb(null, unique);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error('Only JPG, PNG, and WEBP images are allowed'));
+  },
+});
+
+const handleUpload = (req, res, next) => {
+  upload.single('image')(req, res, (err) => {
+    if (err) {
+      return sendError(res, 400, err.message || 'Image upload failed');
+    }
+    return next();
+  });
+};
+
+const getDiskPathFromUrl = (imageUrl) => {
+  if (!imageUrl || typeof imageUrl !== 'string') return null;
+  if (!imageUrl.startsWith('/uploads/')) return null;
+  const relativePath = imageUrl.replace(/^\/+/, '');
+  return path.join(__dirname, '..', relativePath);
+};
+
+const removeFile = async (filePath) => {
+  if (!filePath) return;
+  try {
+    await fs.unlink(filePath);
+  } catch (err) {
+    if (err && err.code !== 'ENOENT') {
+      console.error('Error removing image file:', err);
+    }
+  }
+};
+
+const parseIdsParam = (value) => {
+  if (!value || typeof value !== 'string') return [];
+  return value
+    .split(',')
+    .map((id) => parseInt(id.trim(), 10))
+    .filter((id) => !isNaN(id));
 };
 
 // Get all articles with pagination
@@ -125,6 +205,37 @@ router.get('/category/:category', async (req, res) => {
   }
 });
 
+// Get likes/comments counts for articles (optional ids=1,2,3)
+router.get('/stats', async (req, res) => {
+  try {
+    const ids = parseIdsParam(req.query.ids);
+
+    let sql = `
+      SELECT 
+        a.id,
+        COUNT(DISTINCT l.id) AS likes,
+        COUNT(DISTINCT c.id) AS comments
+      FROM articles a
+      LEFT JOIN likes l ON l.article_id = a.id
+      LEFT JOIN comments c ON c.article_id = a.id
+    `;
+    const params = [];
+
+    if (ids.length > 0) {
+      sql += ` WHERE a.id IN (${ids.map(() => '?').join(',')})`;
+      params.push(...ids);
+    }
+
+    sql += ' GROUP BY a.id';
+
+    const [rows] = await db.query(sql, params);
+    res.json({ stats: rows });
+  } catch (err) {
+    console.error('Error fetching article stats:', err);
+    sendError(res, 500, 'Failed to fetch article stats');
+  }
+});
+
 // Get single article by ID + increment views
 router.get('/:id', async (req, res) => {
   try {
@@ -159,25 +270,41 @@ router.get('/:id', async (req, res) => {
 });
 
 // Admin: Post new article with validation
-router.post('/', adminAuth, async (req, res) => {
+router.post('/', adminAuth, handleUpload, async (req, res) => {
+  const uploadedPath = req.file
+    ? path.join(UPLOAD_DIR, req.file.filename)
+    : null;
+
   try {
-    const { title, content, category } = req.body;
+    const { title, content, category, quote } = req.body;
 
     // Basic validation
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
+      if (uploadedPath) {
+        await removeFile(uploadedPath);
+      }
       return sendError(res, 400, 'Title is required and must be a non-empty string');
     }
 
     if (!content || typeof content !== 'string' || content.trim().length === 0) {
+      if (uploadedPath) {
+        await removeFile(uploadedPath);
+      }
       return sendError(res, 400, 'Content is required and must be a non-empty string');
     }
 
     if (!category || typeof category !== 'string') {
+      if (uploadedPath) {
+        await removeFile(uploadedPath);
+      }
       return sendError(res, 400, 'Category is required');
     }
 
     const normalizedCategory = category.toUpperCase().trim();
     if (!ALLOWED_CATEGORIES.includes(normalizedCategory)) {
+      if (uploadedPath) {
+        await removeFile(uploadedPath);
+      }
       return sendError(
         res,
         400,
@@ -185,9 +312,21 @@ router.post('/', adminAuth, async (req, res) => {
       );
     }
 
+    const imageUrl = req.file ? `/uploads/articles/${req.file.filename}` : null;
+    const normalizedQuote =
+      typeof quote === 'string' && quote.trim().length > 0
+        ? quote.trim()
+        : null;
+
     const [result] = await db.query(
-      'INSERT INTO articles (title, content, category) VALUES (?, ?, ?)',
-      [title.trim(), content.trim(), normalizedCategory]
+      'INSERT INTO articles (title, content, category, quote, image_url) VALUES (?, ?, ?, ?, ?)',
+      [
+        title.trim(),
+        content.trim(),
+        normalizedCategory,
+        normalizedQuote,
+        imageUrl,
+      ]
     );
 
     res.status(201).json({
@@ -195,6 +334,9 @@ router.post('/', adminAuth, async (req, res) => {
       articleId: result.insertId,
     });
   } catch (err) {
+    if (uploadedPath) {
+      await removeFile(uploadedPath);
+    }
     console.error('Error posting article:', err);
 
     // Handle duplicate or constraint errors if needed
@@ -203,6 +345,157 @@ router.post('/', adminAuth, async (req, res) => {
     }
 
     sendError(res, 500, 'Failed to post article');
+  }
+});
+
+// Admin: Update article with validation
+router.put('/:id', adminAuth, handleUpload, async (req, res) => {
+  const uploadedPath = req.file
+    ? path.join(UPLOAD_DIR, req.file.filename)
+    : null;
+
+  try {
+    const articleId = parseInt(req.params.id, 10);
+    if (isNaN(articleId)) {
+      if (uploadedPath) {
+        await removeFile(uploadedPath);
+      }
+      return sendError(res, 400, 'Invalid article ID');
+    }
+
+    const { title, content, category, quote, removeImage } = req.body;
+
+    if (!title || typeof title !== 'string' || title.trim().length === 0) {
+      if (uploadedPath) {
+        await removeFile(uploadedPath);
+      }
+      return sendError(res, 400, 'Title is required and must be a non-empty string');
+    }
+
+    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+      if (uploadedPath) {
+        await removeFile(uploadedPath);
+      }
+      return sendError(res, 400, 'Content is required and must be a non-empty string');
+    }
+
+    if (!category || typeof category !== 'string') {
+      if (uploadedPath) {
+        await removeFile(uploadedPath);
+      }
+      return sendError(res, 400, 'Category is required');
+    }
+
+    const normalizedCategory = category.toUpperCase().trim();
+    if (!ALLOWED_CATEGORIES.includes(normalizedCategory)) {
+      if (uploadedPath) {
+        await removeFile(uploadedPath);
+      }
+      return sendError(
+        res,
+        400,
+        `Invalid category. Allowed values: ${ALLOWED_CATEGORIES.join(', ')}`
+      );
+    }
+
+    const [[existing]] = await db.query(
+      'SELECT id, image_url FROM articles WHERE id = ?',
+      [articleId]
+    );
+
+    if (!existing) {
+      if (uploadedPath) {
+        await removeFile(uploadedPath);
+      }
+      return sendError(res, 404, 'Article not found');
+    }
+
+    const shouldRemoveImage =
+      removeImage === true || removeImage === 'true' || removeImage === '1';
+
+    let nextImageUrl = existing.image_url || null;
+
+    if (req.file) {
+      nextImageUrl = `/uploads/articles/${req.file.filename}`;
+    } else if (shouldRemoveImage) {
+      nextImageUrl = null;
+    }
+
+    const normalizedQuote =
+      typeof quote === 'string' && quote.trim().length > 0
+        ? quote.trim()
+        : null;
+
+    const [result] = await db.query(
+      'UPDATE articles SET title = ?, content = ?, category = ?, quote = ?, image_url = ? WHERE id = ?',
+      [
+        title.trim(),
+        content.trim(),
+        normalizedCategory,
+        normalizedQuote,
+        nextImageUrl,
+        articleId,
+      ]
+    );
+
+    if (result.affectedRows === 0) {
+      if (uploadedPath) {
+        await removeFile(uploadedPath);
+      }
+      return sendError(res, 404, 'Article not found');
+    }
+
+    if (
+      existing.image_url &&
+      existing.image_url !== nextImageUrl &&
+      (shouldRemoveImage || req.file)
+    ) {
+      await removeFile(getDiskPathFromUrl(existing.image_url));
+    }
+
+    res.json({ message: 'Article updated successfully' });
+  } catch (err) {
+    if (uploadedPath) {
+      await removeFile(uploadedPath);
+    }
+    console.error('Error updating article:', err);
+    sendError(res, 500, 'Failed to update article');
+  }
+});
+
+// Admin: Delete article
+router.delete('/:id', adminAuth, async (req, res) => {
+  try {
+    const articleId = parseInt(req.params.id, 10);
+    if (isNaN(articleId)) {
+      return sendError(res, 400, 'Invalid article ID');
+    }
+
+    const [[existing]] = await db.query(
+      'SELECT image_url FROM articles WHERE id = ?',
+      [articleId]
+    );
+
+    if (!existing) {
+      return sendError(res, 404, 'Article not found');
+    }
+
+    const [result] = await db.query('DELETE FROM articles WHERE id = ?', [
+      articleId,
+    ]);
+
+    if (result.affectedRows === 0) {
+      return sendError(res, 404, 'Article not found');
+    }
+
+    if (existing.image_url) {
+      await removeFile(getDiskPathFromUrl(existing.image_url));
+    }
+
+    res.json({ message: 'Article deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting article:', err);
+    sendError(res, 500, 'Failed to delete article');
   }
 });
 

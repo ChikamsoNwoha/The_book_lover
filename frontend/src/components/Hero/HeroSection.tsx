@@ -3,7 +3,13 @@
 // Hero Section Component
 export default function Hero() {
   return (
-    <section className="relative h-[80px] min-h-[600px] flex items-center justify-center overflow-hidden">
+    <section
+      className="relative h-105 md:h-130 flex items-center justify-center overflow-hidden"
+      style={{
+        marginTop: "calc(var(--nav-height) * -1)",
+        paddingTop: "var(--nav-height)",
+      }}
+    >
       {/* Background Image */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat absolute"
@@ -11,16 +17,16 @@ export default function Hero() {
           backgroundImage: `url(/hero-bookshelf.jpg)`,
         }}
       >
-        <div className="absolute inset-0 bg-black/30" />
+        <div className="absolute inset-0 bg-black/20" />
       </div>
 
       {/* Book Lover */}
-      <div className="relative z-10 mt-20 md:mt-24 max-w-2xl mx-auto px-6 text-center">
-        <div className="bg-white shadow-xl px-2 py-4 md:px-4 md:py-5 border-black border-1 rounded-lg">
-          <h1 className="text-5xl md:text-7xl font-bold text-gray-900 leading-tight tracking-wide">
+      <div className="relative z-10 max-w-3xl mx-auto px-6 text-center">
+        <div className="bg-white shadow-[0_20px_45px_rgba(0,0,0,0.15)] px-8 py-10 md:px-12 md:py-12 border border-(--border) border-black">
+          <h1 className="text-4xl md:text-6xl font-['Cormorant_Garamond'] text-gray-900 tracking-[0.15em]">
             THE BOOK LOVER
           </h1>
-          <p className="mt-6 text-lg md:text-xl font-medium text-gray-700 uppercase tracking-widest">
+          <p className="mt-4 text-sm md:text-base text-gray-600 uppercase tracking-[0.3em]">
             Read All About It
           </p>
 

@@ -24,6 +24,10 @@ router.get('/', async (req, res) => {
       SELECT 
         id, 
         title,
+        category,
+        image_url,
+        created_at,
+        SUBSTRING(content, 1, 140) AS excerpt,
         MATCH(title, content) AGAINST(? IN NATURAL LANGUAGE MODE) AS relevance
       FROM articles
       WHERE MATCH(title, content) AGAINST(? IN NATURAL LANGUAGE MODE)
@@ -37,7 +41,7 @@ router.get('/', async (req, res) => {
     if (rows.length === 0) {
       const [fallbackRows] = await db.query(
         `
-        SELECT id, title, 0 AS relevance
+        SELECT id, title, category, image_url, created_at, SUBSTRING(content, 1, 140) AS excerpt, 0 AS relevance
         FROM articles
         WHERE title LIKE ? OR content LIKE ?
         ORDER BY created_at DESC
@@ -51,8 +55,11 @@ router.get('/', async (req, res) => {
     res.json({
       results: rows.map(row => ({
         id: row.id,
-        title: row.title
-        
+        title: row.title,
+        category: row.category,
+        image_url: row.image_url,
+        created_at: row.created_at,
+        excerpt: row.excerpt
       })),
       query: q,
       count: rows.length,

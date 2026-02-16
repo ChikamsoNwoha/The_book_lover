@@ -1,215 +1,384 @@
-'use client';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
+import { Facebook, Menu, Search, Twitter, X } from "lucide-react";
+import { apiRequest } from "../lib/api";
+import { useDebounce } from "../lib/useDebounce";
+import { categoryLabel, imageByCategory } from "../lib/categories";
+import { resolveImageUrl } from "../lib/images";
 
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, Search, Facebook, Twitter } from 'lucide-react';
+type SearchResult = {
+  id: number;
+  title: string;
+  category: string;
+  created_at: string;
+  excerpt?: string | null;
+  image_url?: string | null;
+};
 
-export default function Header() {
+type SearchResponse = {
+  results: SearchResult[];
+  query: string;
+  count: number;
+  hasMore: boolean;
+};
+
+const formatSearchDate = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
+const normalizeExcerpt = (value?: string | null) => {
+  if (!value) return "";
+  return value.replace(/\s+/g, " ").trim();
+};
+
+export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
 
-  // Scroll behavior: hide on scroll down, show on scroll up or at top
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const lastScrollY = useRef(0);
+  const debouncedQuery = useDebounce(query, 300);
+
   useEffect(() => {
-    let previousScroll = window.scrollY;
+    if (!isSearchOpen) return;
+    const timer = window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [isSearchOpen]);
 
+  useEffect(() => {
+    if (isSearchOpen || isMenuOpen) {
+      setIsHidden(false);
+    }
+  }, [isSearchOpen, isMenuOpen]);
+
+  useEffect(() => {
     const handleScroll = () => {
-      const currentScroll = window.scrollY;
-      const isScrollingDown = currentScroll > previousScroll;
-
-      if (currentScroll < 50) {
-        setScrolled(false); // near top
-      } else if (isScrollingDown && currentScroll > 100) {
-        setScrolled(true); // hide header
-      } else if (!isScrollingDown && currentScroll > 100) {
-        setScrolled(false); // show header when scrolling up
+      const current = window.scrollY;
+      if (isSearchOpen || isMenuOpen) {
+        lastScrollY.current = current;
+        return;
       }
 
-      previousScroll = currentScroll;
+      const delta = current - lastScrollY.current;
+      if (Math.abs(delta) < 6) return;
+
+      if (current > lastScrollY.current && current > 80) {
+        setIsHidden(true);
+      } else {
+        setIsHidden(false);
+      }
+      lastScrollY.current = current;
     };
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [isSearchOpen, isMenuOpen]);
+
+  const fetchResults = useCallback(
+    async (offset = 0, append = false) => {
+      if (debouncedQuery.trim().length < 2) return;
+      try {
+        if (append) {
+          setLoadingMore(true);
+        } else {
+          setLoading(true);
+        }
+        setError(null);
+        const data = await apiRequest<SearchResponse>(
+          `/api/search?q=${encodeURIComponent(
+            debouncedQuery.trim()
+          )}&offset=${offset}`
+        );
+        setResults((prev) =>
+          append ? [...prev, ...data.results] : data.results
+        );
+        setHasMore(Boolean(data.hasMore));
+      } catch (err) {
+        setError((err as Error).message || "Search failed");
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [debouncedQuery]
+  );
+
+  useEffect(() => {
+    if (debouncedQuery.trim().length < 2) {
+      setResults([]);
+      setHasMore(false);
+      setError(null);
+      return;
+    }
+
+    fetchResults(0, false);
+  }, [debouncedQuery, fetchResults]);
 
   return (
     <>
-      {/* Main Header */}
-      <motion.header
-        animate={{ y: scrolled ? -100 : 0 }}
-        transition={{ duration: 0.4, ease: 'easeInOut' }}
-        className="fixed top-0 left-0 right-0 z-50 bg-white shadow-sm"
+      <header
+        className={`fixed top-0 left-0 right-0 z-40 bg-white shadow-[0_6px_18px_rgba(0,0,0,0.08)] transition-transform duration-300 ${
+          isHidden ? "-translate-y-full" : "translate-y-0"
+        }`}
       >
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          {/* Logo */}
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-xl">
-              S
-            </div>
-            <h1 className="text-xl font-bold text-gray-900 hidden sm:block">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-6">
+          <div className="flex items-center gap-3">
+            <img
+              src="/meeting-illustration.svg"
+              alt="Meeting illustration"
+              className="w-10 h-10 object-contain"
+            />
+            <p className="text-base md:text-lg font-['Cormorant_Garamond'] tracking-[0.12em] text-gray-900">
               The Small Wins Business Stories
-            </h1>
-            <h1 className="text-lg font-bold text-gray-900 sm:hidden">
-              Small Wins
-            </h1>
+            </p>
           </div>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-10">
-            <a href="/" className="text-gray-700 hover:text-amber-900 font-medium">Home</a>
-            <a href="/about" className="text-gray-700 hover:text-amber-900 font-medium">About</a>
-            <a href="#subscribe" onClick={(e) => { e.preventDefault();
-                document.getElementById('subscribe')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="text-gray-700 hover:text-amber-900 font-medium cursor-pointer"
-            >
-              Subscribe
-            </a>
-          </nav>
+          <div className="hidden md:flex items-center gap-8 ml-auto">
+            <nav className="flex items-center gap-8 font-['Raleway'] text-[15px] font-normal not-italic normal-case tracking-normal leading-[1.4em] text-gray-500">
+              <Link
+                to="/"
+                className="no-underline hover:text-(--accent-brown) transition"
+              >
+                Home
+              </Link>
+              <Link
+                to="/about"
+                className="no-underline hover:text-(--accent-brown) transition"
+              >
+                About
+              </Link>
+              <button
+                type="button"
+                onClick={() =>
+                  document
+                    .getElementById("subscribe")
+                    ?.scrollIntoView({ behavior: "smooth" })
+                }
+                className="no-underline hover:text-(--accent-brown) transition"
+              >
+                Subscribe
+              </button>
+            </nav>
 
-          {/* Right Icons */}
-          <div className="flex items-center space-x-6">
-            {/* Search Icon */}
             <button
+              type="button"
               onClick={() => setIsSearchOpen(true)}
-              className="text-gray-700 hover:text-gray-900"
+              className="hidden md:flex items-center gap-2 text-sm text-gray-600 hover:text-(--accent-brown)"
             >
-              <Search className="w-5 h-5" /> 
+              <Search className="w-4 h-4" />
+              Search...
             </button>
 
-            {/* Social Icons */}
-            <div className="hidden sm:flex items-center space-x-4">
-              <a href="#" className="text-gray-700 hover:text-gray-900">
-                <Facebook className="w-5 h-5" />
+            <div className="hidden md:flex items-center gap-4 text-gray-600">
+              <a href="#" className="hover:text-(--accent-brown)">
+                <Facebook className="w-4 h-4" />
               </a>
-              <a href="#" className="text-gray-700 hover:text-gray-900">
-                <Twitter className="w-5 h-5" />
+              <a href="#" className="hover:text-(--accent-brown)">
+                <Twitter className="w-4 h-4" />
               </a>
             </div>
 
-            {/* Mobile Menu Button */}
+          </div>
+
+          <div className="flex items-center gap-4 md:hidden">
+            <button
+              onClick={() => setIsSearchOpen(true)}
+              className="text-gray-600"
+              aria-label="Open search"
+            >
+              <Search className="w-5 h-5" />
+            </button>
+
             <button
               onClick={() => setIsMenuOpen(true)}
-              className="md:hidden text-gray-700"
+              className="text-gray-600"
+              aria-label="Open menu"
             >
               <Menu className="w-6 h-6" />
             </button>
           </div>
         </div>
-      </motion.header>
+      </header>
 
-      {/* Mobile Menu Overlay */}
       <AnimatePresence>
         {isMenuOpen && (
           <motion.div
-            initial={{ x: '100%' }}
+            initial={{ x: "100%" }}
             animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'tween', duration: 0.3 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "tween", duration: 0.3 }}
             className="fixed inset-0 bg-white z-50 md:hidden"
           >
             <div className="flex justify-between items-center px-6 py-5 border-b">
-              <h2 className="text-xl font-bold">Menu</h2>
+              <h2 className="text-xl font-semibold">Menu</h2>
               <button onClick={() => setIsMenuOpen(false)}>
                 <X className="w-6 h-6" />
               </button>
             </div>
             <nav className="flex flex-col px-6 py-8 space-y-8 text-lg">
-              <a href="#" className="text-gray-800 hover:text-amber-900">Home</a>
-              <a href="#" className="text-gray-800 hover:text-amber-900">About</a>
-              <a
-                  href="#subscribe"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    document.getElementById('subscribe')?.scrollIntoView({ behavior: 'smooth' });
-                    setIsMenuOpen(false); // Close mobile menu after click
-                  }}
-                  className="text-gray-800 hover:text-amber-900"
-                >
-                  Subscribe
-                </a>
+              <Link
+                to="/"
+                className="text-gray-800 hover:text-(--accent-brown)"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Home
+              </Link>
+              <Link
+                to="/about"
+                className="text-gray-800 hover:text-(--accent-brown)"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                About
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  document
+                    .getElementById("subscribe")
+                    ?.scrollIntoView({ behavior: "smooth" });
+                  setIsMenuOpen(false);
+                }}
+                className="text-left text-gray-800 hover:text-(--accent-brown)"
+              >
+                Subscribe
+              </button>
             </nav>
-            <div className="absolute bottom-10 left-6 right-6 flex justify-center space-x-8">
-              <a href="#" className="text-gray-600">
-                <Facebook className="w-6 h-6" />
-              </a>
-              <a href="#" className="text-gray-600">
-                <Twitter className="w-6 h-6" />
-              </a>
-            </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Search Popup */}
       <AnimatePresence>
         {isSearchOpen && (
           <>
-            {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsSearchOpen(false)}
-              className="fixed inset-0 bg-black bg-opacity-40 z-50"
+              className="fixed inset-0 bg-black/30 z-40"
             />
 
-            {/* Search Bar */}
             <motion.div
-              initial={{ y: -100, opacity: 0 }}
+              initial={{ y: -40, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              exit={{ y: -100, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="fixed top-0 left-0 right-0 bg-white shadow-lg z-50 px-6 py-5"
+              exit={{ y: -40, opacity: 0 }}
+              transition={{ type: "tween", duration: 0.25 }}
+              className="fixed top-0 left-0 right-0 bg-white shadow-lg z-50"
             >
-              <div className="max-w-4xl mx-auto flex items-center justify-between">
-                <div className="flex items-center flex-1 mr-4">
-                  <Search className="w-6 h-6 text-gray-500 mr-4" />
+              <div className="max-w-6xl mx-auto px-6 py-6">
+                <div className="flex items-center gap-4">
+                  <Search className="w-5 h-5 text-gray-400" />
                   <input
-                    type="text"
-                    placeholder="Search..."
-                    autoFocus
-                    className="w-full outline-none text-lg placeholder-gray-500"
+                    ref={inputRef}
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Search"
+                    className="flex-1 text-lg outline-none placeholder-gray-400"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setIsSearchOpen(false)}
+                    className="text-sm uppercase tracking-[0.2em] text-gray-500 hover:text-(--accent-brown)"
+                  >
+                    Close
+                  </button>
                 </div>
-                <button
-                  onClick={() => setIsSearchOpen(false)}
-                  className="text-gray-600 hover:text-gray-900"
-                >
-                  Close
-                </button>
-              </div>
 
-              {/* Optional: Search Results Preview (you said backend not ready yet) */}
-              <div className="mt-8 border-t pt-6">
-                <p className="text-sm text-gray-500 mb-4">Blog Posts</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                  {/* Placeholder previews */}
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex space-x-3">
-                      <div className="w-16 h-16 bg-gray-200 rounded-lg flex-shrink-0" />
-                      <div>
-                        <h4 className="font-medium text-gray-800 text-sm line-clamp-2">
-                          Sample Blog Title {i}
-                        </h4>
-                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">
-                          This is a preview of the blog post content...
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                <div className="mt-10 border-t border-(--border) pt-8">
+                  <p className="text-xs uppercase tracking-[0.3em] text-gray-400 mb-6">
+                    Blog Posts
+                  </p>
+
+                  {loading && (
+                    <p className="text-sm text-gray-500">Searching...</p>
+                  )}
+
+                  {!loading && error && (
+                    <p className="text-sm text-red-500">{error}</p>
+                  )}
+
+                  {!loading && !error && results.length === 0 && (
+                    <p className="text-sm text-gray-500">
+                      {debouncedQuery.trim().length < 2
+                        ? "Type at least 2 characters to search."
+                        : "No results found."}
+                    </p>
+                  )}
+
+                  <div className="grid gap-6 md:grid-cols-3">
+                    {results.map((result) => {
+                      const image =
+                        resolveImageUrl(result.image_url) ||
+                        imageByCategory[result.category] ||
+                        "/hero-bookshelf.jpg";
+                      const excerpt = normalizeExcerpt(result.excerpt);
+                      const date = formatSearchDate(result.created_at);
+                      const category =
+                        categoryLabel[result.category] || result.category;
+
+                      return (
+                        <Link
+                          key={result.id}
+                          to={`/story/${result.id}`}
+                          onClick={() => setIsSearchOpen(false)}
+                          className="group flex items-start gap-4"
+                        >
+                          <img
+                            src={image}
+                            alt={result.title}
+                            className="w-16 h-16 object-cover border border-(--border)"
+                          />
+                          <div className="flex-1">
+                            <p className="text-[11px] uppercase tracking-[0.25em] text-gray-400">
+                              {category}
+                              {date ? ` \u00B7 ${date}` : ""}
+                            </p>
+                            <p className="mt-1 text-sm font-['Cormorant_Garamond'] text-gray-900 group-hover:text-(--accent-brown) transition-colors">
+                              {result.title}
+                            </p>
+                            {excerpt && (
+                              <p className="mt-1 text-xs text-gray-500 line-clamp-2">
+                                {excerpt}
+                              </p>
+                            )}
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+
+                  {hasMore && (
+                    <button
+                      type="button"
+                      onClick={() => fetchResults(results.length, true)}
+                      disabled={loadingMore}
+                      className="mt-10 bg-black text-white px-8 py-3 uppercase text-xs tracking-[0.3em] hover:bg-gray-800 disabled:opacity-60"
+                    >
+                      {loadingMore ? "Loading..." : "Show All Results"}
+                    </button>
+                  )}
                 </div>
-                <button className="mt-8 bg-black text-white px-8 py-3 rounded-none hover:bg-gray-800 transition">
-                  Show All Results
-                </button>
               </div>
             </motion.div>
           </>
         )}
       </AnimatePresence>
-
-      {/* Spacer so content isn't hidden under fixed header */}
-      <div className="h-20" />
     </>
   );
 }

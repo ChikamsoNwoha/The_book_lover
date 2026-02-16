@@ -53,7 +53,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           'relative group isolate font-medium rounded-2xl transition-all duration-300',
           
           // Gradient border (using pseudo-elements)
-          'before:absolute before:inset-0 before:rounded-2xl before:p-px before:bg-gradient-to-r',
+          'before:absolute before:inset-0 before:rounded-2xl before:p-px before:bg-linear-to-r',
           'before:from-purple-500 before:via-pink-500 before:to-purple-500 before:opacity-80',
           'before:-z-10 before:transition-opacity before:duration-300',
           
@@ -79,7 +79,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       >
         {/* Animated shine effect on hover */}
         <span className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700 overflow-hidden">
-          <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+          <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-linear-to-r from-transparent via-white/10 to-transparent" />
         </span>
 
         {/* Button content */}

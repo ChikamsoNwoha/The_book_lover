@@ -1,46 +1,141 @@
-// src/Pages/StoryCard.tsx
-import { useSearchParams, Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Heart } from "lucide-react";
+import { apiRequest } from "../lib/api";
+import ShareModal from "../components/ShareModal";
+import { useLikes } from "../lib/likes";
+import CategoryTabs from "../components/CategoryTabs";
+import ShareMenu from "../components/ShareMenu";
+import { categorySlugToApi, imageByCategory } from "../lib/categories";
+import { resolveImageUrl } from "../lib/images";
 
-// Your real posts
-const allPosts = [
-  {
-    id: 1,
-    title: "Linda’s Thread of Change",
-    excerpt: "From a hostel room with an old sewing machine, Linda built a thriving tailoring business...",
-    author: "CHIDERA E. ABEL",
-    date: "Aug 14",
-    readTime: "7 min read",
-    image: "/linda-sewing.jpg",
-    category: "fashion-sewing",
-  },
-  {
-    id: 2,
-    title: "From Farmer to Millionaire",
-    excerpt: "In the quiet mornings before sunrise, while Zaria still slept, Abdul Sani was already awake...",
-    author: "CHIDERA E. ABEL",
-    date: "Aug 10",
-    readTime: "8 min read",
-    image: "/farmer.jpg",
-    category: "entrepreneurship-journeys",
-  },
-  // Add more posts here
-];
+type Article = {
+  id: number;
+  title: string;
+  content: string;
+  category: "ENTREPRENEURSHIP" | "FASHION";
+  image_url?: string | null;
+  views: number;
+  created_at: string;
+};
 
-const categories = [
-  { name: "All Posts", slug: "" },
-  { name: "Entrepreneurship Journeys", slug: "entrepreneurship-journeys" },
-  { name: "Fashion & Sewing", slug: "fashion-sewing" },
-];
+type ArticlesResponse = {
+  articles: Article[];
+  pagination: {
+    currentPage: number;
+    totalPages: number;
+    totalArticles: number;
+    limit: number;
+  };
+};
+
+type StatsResponse = {
+  stats: Array<{ id: number; likes: number; comments: number }>;
+};
+
+const formatListDate = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
+const estimateReadTime = (content: string) => {
+  const words = content?.trim().split(/\s+/).filter(Boolean).length || 0;
+  const minutes = Math.max(1, Math.ceil(words / 200));
+  return `${minutes} min read`;
+};
+
+const makeExcerpt = (content: string) => {
+  if (!content) return "";
+  const normalized = content.replace(/\s+/g, " ").trim();
+  if (normalized.length <= 160) return normalized;
+  return `${normalized.slice(0, 160)}...`;
+};
 
 export default function StoryCard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentSlug = searchParams.get("category") || "";
   const isAllPosts = currentSlug === "" || currentSlug === "all";
 
-  const filteredPosts = isAllPosts
-    ? allPosts
-    : allPosts.filter((post) => post.category === currentSlug);
+  const { like, likedIds, likeCounts, setLikeCount } = useLikes();
+
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<
+    Record<number, { likes: number; comments: number }>
+  >({});
+  const [sharePost, setSharePost] = useState<Article | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [likeErrorById, setLikeErrorById] = useState<Record<number, string>>(
+    {}
+  );
+
+  const apiCategory = useMemo(
+    () => categorySlugToApi.get(currentSlug) || "ALL",
+    [currentSlug]
+  );
+
+  useEffect(() => {
+    let ignore = false;
+
+    const fetchArticles = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const endpoint =
+          apiCategory === "ALL"
+            ? "/api/articles?page=1&limit=10"
+            : `/api/articles/category/${apiCategory}?page=1&limit=10`;
+
+        const data = await apiRequest<ArticlesResponse>(endpoint);
+        if (!ignore) {
+          setArticles(data.articles || []);
+        }
+      } catch (err) {
+        if (!ignore) {
+          setError((err as Error).message || "Failed to load stories");
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchArticles();
+    return () => {
+      ignore = true;
+    };
+  }, [apiCategory]);
+
+  useEffect(() => {
+    if (articles.length === 0) return;
+
+    const fetchStats = async () => {
+      try {
+        const ids = articles.map((article) => article.id).join(",");
+        const data = await apiRequest<StatsResponse>(
+          `/api/articles/stats?ids=${ids}`
+        );
+        const nextStats: Record<number, { likes: number; comments: number }> = {};
+        data.stats.forEach((item) => {
+          nextStats[item.id] = { likes: item.likes, comments: item.comments };
+          setLikeCount(item.id, item.likes);
+        });
+        setStats(nextStats);
+      } catch {
+        // stats are optional; ignore failures
+      }
+    };
+
+    fetchStats();
+  }, [articles, setLikeCount]);
 
   const setCategory = (slug: string) => {
     if (slug) {
@@ -50,102 +145,167 @@ export default function StoryCard() {
     }
   };
 
+  const getShareUrl = (id: number) => {
+    if (typeof window === "undefined") return `/story/${id}`;
+    return `${window.location.origin}/story/${id}`;
+  };
+
   return (
-    <section className="py-16 bg-gray-50">
-      {/* Category Tabs */}
-      <div className="max-w-7xl mx-auto px-6 mb-12">
-        <nav className="flex flex-wrap gap-8 justify-center text-lg font-medium">
-          {categories.map((cat) => {
-            const isActive = (cat.slug === "" && isAllPosts) || cat.slug === currentSlug;
+    <section className="py-14 bg-white">
+      <div className="max-w-5xl mx-auto px-6 mb-10">
+        <CategoryTabs activeSlug={currentSlug} onSelect={setCategory} />
+      </div>
+
+      <div className="max-w-5xl mx-auto px-6">
+        {loading && (
+          <p className="text-center text-gray-500 py-12 text-lg">
+            Loading stories...
+          </p>
+        )}
+
+        {error && !loading && (
+          <p className="text-center text-red-500 py-12 text-lg">{error}</p>
+        )}
+      </div>
+
+      {!loading && !error && (
+        <div
+          className={`max-w-5xl mx-auto px-6 ${
+            isAllPosts ? "grid grid-cols-1 md:grid-cols-2 gap-10" : "grid gap-10"
+          }`}
+        >
+          {articles.map((post) => {
+            const image =
+              resolveImageUrl(post.image_url) ||
+              imageByCategory[post.category] ||
+              "/hero-bookshelf.jpg";
+            const stat = stats[post.id];
+            const likeCount = likeCounts[post.id] ?? stat?.likes ?? 0;
+            const commentCount = stat?.comments ?? 0;
+            const isLiked = likedIds.has(post.id);
+            const isMenuOpen = openMenuId === post.id;
+
             return (
-              <button
-                key={cat.slug}
-                onClick={() => setCategory(cat.slug)}
-                className={`pb-3 border-b-2 transition-all ${
-                  isActive
-                    ? "text-amber-900 font-semibold border-amber-900"
-                    : "text-gray-600 hover:text-amber-800 border-transparent"
+              <article
+                key={post.id}
+                className={`group bg-white border border-(--border) shadow-[0_12px_32px_rgba(0,0,0,0.06)] ${
+                  !isAllPosts && "max-w-4xl mx-auto"
                 }`}
               >
-                {cat.name}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+                <Link to={`/story/${post.id}`} className="block">
+                  <div className="w-full h-56 md:h-64 overflow-hidden">
+                    <img
+                      src={image}
+                      alt={post.title}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                  </div>
+                </Link>
 
-      {/* Posts Grid / Single View */}
-      <div
-        className={`max-w-6xl mx-auto px-6 ${
-          isAllPosts
-            ? "grid grid-cols-1 md:grid-cols-2 gap-12"
-            : "flex flex-col gap-20"
-        }`}
-      >
-        {filteredPosts.map((post) => (
-          <article
-            key={post.id}
-            className={`group cursor-pointer bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-all ${
-              !isAllPosts && "max-w-4xl mx-auto"
-            }`}
-          >
-            <div className={isAllPosts ? "flex flex-col h-full" : "flex flex-col md:flex-row"}>
-              {/* Image */}
-              <div
-                className={`${
-                  isAllPosts
-                    ? "w-full h-64 md:h-80"
-                    : "md:w-[45%] w-full h-80 md:h-96"
-                } overflow-hidden`}
-              >
-                <img
-                  src={post.image}
-                  alt={post.title}
-                  className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-500"
-                />
-              </div>
-
-              {/* Content */}
-              <div
-                className={`p-8 md:p-10 ${isAllPosts ? "flex-grow" : "md:w-[55%]"} flex flex-col justify-between`}
-              >
-                <div className="space-y-6">
-                  <div className="flex items-center gap-3 text-sm text-gray-600">
-                    <img src="/chidera.jpg" alt="author" className="w-10 h-10 rounded-full object-cover" />
-                    <span className="font-medium">{post.author}</span>
-                    <span>•</span>
-                    <span>{post.date} • {post.readTime}</span>
+                <div className="px-8 py-7">
+                  <div className="flex items-center justify-between text-xs uppercase tracking-widest text-gray-500 mb-4">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src="/chidera.jpg"
+                        alt="author"
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium text-gray-700 tracking-normal uppercase">
+                          CHIDERA E. ABEL
+                        </span>
+                        <span className="text-[11px] text-gray-500 tracking-normal uppercase">
+                          {formatListDate(post.created_at)} &middot;{" "}
+                          {estimateReadTime(post.content)}
+                        </span>
+                      </div>
+                    </div>
+                    <ShareMenu
+                      open={isMenuOpen}
+                      onOpen={() => setOpenMenuId(post.id)}
+                      onClose={() => setOpenMenuId(null)}
+                      onShare={() => {
+                        setSharePost(post);
+                        setOpenMenuId(null);
+                      }}
+                    />
                   </div>
 
-                  <h2 className="text-3xl md:text-4xl font-bold leading-tight text-gray-900">
-                    {post.title}
-                  </h2>
+                  <Link to={`/story/${post.id}`} className="block">
+                    <h2 className="text-2xl md:text-3xl font-['Cormorant_Garamond'] text-gray-900 leading-snug group-hover:text-(--accent-brown) transition-colors">
+                      {post.title}
+                    </h2>
 
-                  <p className="text-lg text-gray-700 leading-relaxed line-clamp-4">
-                    {post.excerpt}
-                  </p>
+                    <p className="mt-4 text-[15px] text-gray-700 leading-relaxed line-clamp-4 group-hover:text-(--accent-brown) transition-colors">
+                      {makeExcerpt(post.content)}
+                    </p>
+                  </Link>
                 </div>
 
-                <div className="mt-8 pt-6 border-t border-gray-200">
-                  <div className="flex justify-between items-center text-sm text-gray-500">
-                    <span>0 views • 0 comments</span>
-                    <button className="text-3xl text-pink-500 hover:scale-125 transition-transform">
-                       ♡
+                <div className="px-8 pb-6">
+                  <div className="border-t border-(--border) pt-4 flex items-center justify-between text-xs text-gray-500">
+                    <span>
+                      {post.views} views &middot; {commentCount} comments
+                    </span>
+                    <button
+                      type="button"
+                      onClick={async (event) => {
+                        event.preventDefault();
+                        setLikeErrorById(
+                          (prev): Record<number, string> => {
+                            const { [post.id]: _removed, ...rest } = prev;
+                            return rest;
+                          }
+                        );
+                        const result = await like(post.id);
+                        if (!result.ok && result.message) {
+                          const message = result.message;
+                          setLikeErrorById((prev) => ({
+                            ...prev,
+                            [post.id]: message,
+                          }));
+                        }
+                      }}
+                      className={`inline-flex items-center gap-2 ${
+                        isLiked ? "text-red-600" : "text-gray-400"
+                      } hover:text-red-500`}
+                    >
+                      <span>{likeCount}</span>
+                      <Heart
+                        className={isLiked ? "w-4 h-4 fill-current" : "w-4 h-4"}
+                      />
                     </button>
                   </div>
+                  {likeErrorById[post.id] && (
+                    <p className="mt-2 text-xs text-red-500">
+                      {likeErrorById[post.id]}
+                    </p>
+                  )}
                 </div>
-              </div>
-            </div>
-          </article>
-        ))}
-      </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
 
-      {/* Empty state */}
-      {!isAllPosts && filteredPosts.length === 0 && (
+      {!loading && !error && articles.length === 0 && (
         <p className="text-center text-gray-500 py-20 text-lg">
           No stories in this category yet. Coming soon!
         </p>
       )}
+
+      <ShareModal
+        open={Boolean(sharePost)}
+        onClose={() => setSharePost(null)}
+        shareUrl={
+          sharePost
+            ? getShareUrl(sharePost.id)
+            : typeof window === "undefined"
+              ? ""
+              : window.location.href
+        }
+        title={sharePost?.title}
+      />
     </section>
   );
 }

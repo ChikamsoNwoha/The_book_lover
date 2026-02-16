@@ -9,8 +9,8 @@ function App() {
       <Navbar />
 
       {/* This is where the page content changes */}
-      <main className="flex-1">
-        <Outlet />      
+      <main className="flex-1 pt-(--nav-height)">
+        <Outlet />
       </main>
 
       {/* Always visible on every page */}
