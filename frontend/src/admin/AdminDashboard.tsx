@@ -37,6 +37,13 @@ const AdminDashboard = () => {
           >
             Comments
           </Link>
+
+          <Link
+            to="/admin/dashboard/newsletter"
+            className="block rounded-lg px-4 py-2 hover:bg-gray-800 transition"
+          >
+            Newsletter
+          </Link>
         </nav>
 
         <button

@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiRequest } from "../lib/api";
 
 const AdminLogin = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sessionExpired = searchParams.get("reason") === "expired";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,6 +42,12 @@ const AdminLogin = () => {
         <h1 className="text-2xl font-semibold mb-6 text-center">
           Admin Login
         </h1>
+
+        {!error && sessionExpired && (
+          <div className="mb-4 text-sm text-amber-300 bg-amber-950/40 border border-amber-800 rounded-lg p-3">
+            Session expired, please sign in again.
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 text-sm text-red-400 bg-red-950/40 border border-red-900 rounded-lg p-3">

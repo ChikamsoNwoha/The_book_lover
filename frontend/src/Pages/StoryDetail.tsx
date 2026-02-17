@@ -29,6 +29,8 @@ type Comment = {
   name: string;
   comment: string;
   created_at: string;
+  admin_reply?: string | null;
+  admin_reply_updated_at?: string | null;
 };
 
 type CommentsResponse = {
@@ -406,6 +408,19 @@ export default function StoryDetail() {
                   {formatDetailDate(item.created_at)}
                 </p>
                 <p className="mt-2 text-sm text-gray-700">{item.comment}</p>
+                {item.admin_reply && (
+                  <div className="mt-3 border-l-2 border-(--accent-brown) pl-3">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">
+                      Admin Reply
+                    </p>
+                    <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">
+                      {item.admin_reply}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400">
+                      {formatDetailDate(item.admin_reply_updated_at || item.created_at)}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           ))}

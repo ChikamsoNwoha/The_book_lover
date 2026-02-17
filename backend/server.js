@@ -1,28 +1,46 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const dotenv = require('dotenv');
+
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const adminRoutes = require('./admin/admin.routes');
+const adminNewsletterRoutes = require('./routes/adminNewsletter');
 const articleRoutes = require('./routes/articles');
 const interactionRoutes = require('./routes/interactions');
 const newsletterRoutes = require('./routes/newsletter');
 const searchRoutes = require('./routes/search');
+const newsletterService = require('./services/newsletterService');
 
 const app = express();
+const port = parseInt(process.env.PORT, 10) || 5000;
 app.set('trust proxy', true);
 
 app.use(cors());
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, _res, buffer) => {
+      req.rawBody = buffer?.length ? buffer.toString('utf8') : '';
+    },
+  })
+);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true });
+});
 
 app.use('/api/articles', articleRoutes);
 app.use('/api/interactions', interactionRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/admin/newsletter', adminNewsletterRoutes);
 app.use('/api/admin', adminRoutes);
 
-
-app.listen(5000, () => {
-  console.log('Server running on port 5000');
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+  newsletterService.resumePendingCampaigns().catch((err) => {
+    console.error('Failed to resume pending newsletter campaigns:', err);
+  });
 });

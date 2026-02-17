@@ -27,6 +27,15 @@ const categories = [
   { label: "Fashion & Sewing", value: "FASHION" },
 ];
 
+const NEWSLETTER_PREF_KEY = "admin_articles_send_newsletter";
+
+const getInitialNewsletterPreference = () => {
+  if (typeof window === "undefined") return true;
+  const saved = window.localStorage.getItem(NEWSLETTER_PREF_KEY);
+  if (saved === null) return true;
+  return saved === "true";
+};
+
 const formatDate = (value: string) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Unknown date";
@@ -53,6 +62,10 @@ export default function ArticlesManager() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [storedImageUrl, setStoredImageUrl] = useState<string | null>(null);
   const [removeImage, setRemoveImage] = useState(false);
+  const [sendNewsletter, setSendNewsletter] = useState<boolean>(
+    getInitialNewsletterPreference
+  );
+  const [newsletterSubject, setNewsletterSubject] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -90,6 +103,10 @@ export default function ArticlesManager() {
     };
   }, [imagePreview]);
 
+  useEffect(() => {
+    window.localStorage.setItem(NEWSLETTER_PREF_KEY, String(sendNewsletter));
+  }, [sendNewsletter]);
+
   const resetForm = () => {
     setTitle("");
     setCategory("ENTREPRENEURSHIP");
@@ -100,6 +117,7 @@ export default function ArticlesManager() {
     setStoredImageUrl(null);
     setRemoveImage(false);
     setEditingId(null);
+    setNewsletterSubject("");
     setFormError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -189,6 +207,12 @@ export default function ArticlesManager() {
       }
       if (editingId && removeImage) {
         payload.append("removeImage", "true");
+      }
+      if (!editingId) {
+        payload.append("sendNewsletter", String(sendNewsletter));
+        if (newsletterSubject.trim()) {
+          payload.append("newsletterSubject", newsletterSubject.trim());
+        }
       }
 
       if (editingId) {
@@ -287,7 +311,7 @@ export default function ArticlesManager() {
             {(imagePreview || storedImageUrl) && (
               <div className="mt-3">
                 <img
-                  src={imagePreview || storedImageUrl}
+                  src={imagePreview || storedImageUrl || undefined}
                   alt="Article preview"
                   className="w-full h-40 object-cover rounded-lg border border-gray-700"
                 />
@@ -306,6 +330,34 @@ export default function ArticlesManager() {
               </p>
             )}
           </div>
+
+          {!editingId && (
+            <div className="rounded-lg border border-gray-800 bg-gray-950/40 p-3 space-y-3">
+              <label className="flex items-center gap-3 text-sm text-gray-200">
+                <input
+                  type="checkbox"
+                  checked={sendNewsletter}
+                  onChange={(event) => setSendNewsletter(event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-600 bg-gray-800 text-amber-500 focus:ring-amber-500"
+                />
+                Send newsletter to verified subscribers after publish
+              </label>
+
+              {sendNewsletter && (
+                <div>
+                  <label className="block text-xs uppercase tracking-wide text-gray-400 mb-1">
+                    Subject override (optional)
+                  </label>
+                  <input
+                    value={newsletterSubject}
+                    onChange={(event) => setNewsletterSubject(event.target.value)}
+                    className="w-full rounded-lg bg-gray-800 border border-gray-700 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    placeholder="Defaults to: New post: {title}"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {formError && <p className="text-sm text-red-400">{formError}</p>}
 

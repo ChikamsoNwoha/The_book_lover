@@ -158,10 +158,43 @@ router.get('/comments/:id', async (req, res) => {
       return sendError(res, 400, 'Invalid article ID');
     }
 
-    const [rows] = await db.query(
-      'SELECT id, name, comment, created_at FROM comments WHERE article_id = ? ORDER BY created_at DESC',
-      [articleId]
-    );
+    let rows = [];
+    try {
+      const [joinedRows] = await db.query(
+        `SELECT
+          c.id,
+          c.name,
+          c.comment,
+          c.created_at,
+          r.reply AS admin_reply,
+          r.updated_at AS admin_reply_updated_at
+        FROM comments c
+        LEFT JOIN comment_replies r ON r.comment_id = c.id
+        WHERE c.article_id = ?
+        ORDER BY c.created_at DESC`,
+        [articleId]
+      );
+      rows = joinedRows;
+    } catch (err) {
+      if (err.code !== 'ER_NO_SUCH_TABLE') {
+        throw err;
+      }
+
+      const [fallbackRows] = await db.query(
+        `SELECT
+          id,
+          name,
+          comment,
+          created_at,
+          NULL AS admin_reply,
+          NULL AS admin_reply_updated_at
+        FROM comments
+        WHERE article_id = ?
+        ORDER BY created_at DESC`,
+        [articleId]
+      );
+      rows = fallbackRows;
+    }
 
     res.json({
       articleId,

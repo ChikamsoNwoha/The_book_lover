@@ -10,6 +10,28 @@ type ApiErrorPayload = {
   error?: string;
 };
 
+export class ApiError extends Error {
+  status: number;
+  url: string;
+  path: string;
+  payload?: unknown;
+
+  constructor(
+    message: string,
+    status: number,
+    url: string,
+    path: string,
+    payload?: unknown
+  ) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.url = url;
+    this.path = path;
+    this.payload = payload;
+  }
+}
+
 export async function apiRequest<T>(
   path: string,
   options: RequestInit = {}
@@ -30,10 +52,16 @@ export async function apiRequest<T>(
   const data = isJson ? await res.json() : await res.text();
 
   if (!res.ok) {
-    const payload = data as ApiErrorPayload;
+    const payload = isJson ? (data as ApiErrorPayload) : undefined;
+    const textPayload = typeof data === "string" ? data.trim() : "";
     const message =
-      payload?.message || payload?.error || res.statusText || "Request failed";
-    throw new Error(message);
+      payload?.message ||
+      payload?.error ||
+      textPayload ||
+      res.statusText ||
+      "Request failed";
+
+    throw new ApiError(message, res.status, url, normalizedPath, data);
   }
 
   return data as T;

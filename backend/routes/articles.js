@@ -6,6 +6,7 @@ const multer = require('multer');
 const router = express.Router();
 const adminAuth = require('../middleware/adminAuth');
 const db = require('../db');
+const newsletterService = require('../services/newsletterService');
 
 const ALLOWED_CATEGORIES = ['ENTREPRENEURSHIP', 'FASHION'];
 const DEFAULT_LIMIT = 10;
@@ -276,7 +277,7 @@ router.post('/', adminAuth, handleUpload, async (req, res) => {
     : null;
 
   try {
-    const { title, content, category, quote } = req.body;
+    const { title, content, category, quote, sendNewsletter, newsletterSubject } = req.body;
 
     // Basic validation
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
@@ -329,9 +330,34 @@ router.post('/', adminAuth, handleUpload, async (req, res) => {
       ]
     );
 
+    const shouldSendNewsletter = newsletterService.parseBoolean(sendNewsletter, false);
+    const normalizedNewsletterSubject =
+      typeof newsletterSubject === 'string' && newsletterSubject.trim().length > 0
+        ? newsletterSubject.trim()
+        : '';
+
+    if (shouldSendNewsletter) {
+      setImmediate(async () => {
+        try {
+          await newsletterService.createAutoArticleCampaign({
+            article: {
+              id: result.insertId,
+              title: title.trim(),
+              content: content.trim(),
+            },
+            createdByAdminId: req.admin?.id || null,
+            subjectOverride: normalizedNewsletterSubject,
+          });
+        } catch (newsletterErr) {
+          console.error('Failed to queue auto newsletter campaign:', newsletterErr);
+        }
+      });
+    }
+
     res.status(201).json({
       message: 'Article posted successfully',
       articleId: result.insertId,
+      newsletterQueued: shouldSendNewsletter,
     });
   } catch (err) {
     if (uploadedPath) {

@@ -1,16 +1,46 @@
-# React + Vite
+# The Book Lover Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This directory contains the React + Vite frontend for The Book Lover.
 
-Currently, two official plugins are available:
+For full project setup (backend, database, admin, newsletters), use the root README:
+- `../README.md`
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Requirements
 
-## React Compiler
+- Node.js `20.19+` (or `22.12+`)
+- pnpm
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Setup
 
-## Expanding the ESLint configuration
+From repository root:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+cd frontend
+pnpm install
+```
+
+## Run in Development
+
+```bash
+cd frontend
+pnpm run dev
+```
+
+Default app URL: `http://localhost:5173`
+
+## Environment
+
+Optional `frontend/.env`:
+
+```bash
+VITE_API_BASE_URL=http://localhost:5000
+```
+
+If omitted, frontend API requests default to `http://localhost:5000`.
+
+## Scripts
+
+- `pnpm run dev` - start Vite dev server
+- `pnpm run build` - create production build
+- `pnpm run preview` - preview production build locally
+- `pnpm run lint` - run ESLint

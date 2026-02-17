@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { Navigate, createBrowserRouter, RouterProvider } from "react-router-dom";
 
 import "./index.css";
 import App from "./App";
@@ -13,6 +13,8 @@ import AdminLogin from "./admin/AdminLogin";
 import AdminDashboard from "./admin/AdminDashboard";
 import ArticlesManager from "./admin/ArticlesManager";
 import CommentsManager from "./admin/CommentsManager";
+import AdminOverview from "./admin/AdminOverview";
+import NewsletterManager from "./admin/NewsletterManager";
 import ProtectedRoute from "./admin/ProtectedRoute";
 
 const router = createBrowserRouter([
@@ -32,6 +34,22 @@ const router = createBrowserRouter([
     path: "/admin",
     element: <AdminLogin />,
   },
+  {
+    path: "/admin/dashboard/overview",
+    element: <Navigate to="/admin/dashboard" replace />,
+  },
+  {
+    path: "/admin/articles",
+    element: <Navigate to="/admin/dashboard/articles" replace />,
+  },
+  {
+    path: "/admin/comments",
+    element: <Navigate to="/admin/dashboard/comments" replace />,
+  },
+  {
+    path: "/admin/newsletter",
+    element: <Navigate to="/admin/dashboard/newsletter" replace />,
+  },
 
   // ===== ADMIN DASHBOARD (PROTECTED) =====
   {
@@ -42,10 +60,15 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
     children: [
-      { index: true, element: <div>Welcome Admin</div> },
+      { index: true, element: <AdminOverview /> },
       { path: "articles", element: <ArticlesManager /> },
       { path: "comments", element: <CommentsManager /> },
+      { path: "newsletter", element: <NewsletterManager /> },
     ],
+  },
+  {
+    path: "/admin/*",
+    element: <Navigate to="/admin/dashboard" replace />,
   },
 ]);
 

@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "dev": "node server.js",
+    "dev:watch": "nodemon server.js",
+    "smoke:admin": "node scripts/smoke-admin.js"
+  },
   "dependencies": {
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
@@ -9,7 +14,7 @@
     "mysql2": "^3.16.0",
     "nodemailer": "^7.0.12"
   },
-  "scripts": {
-    "dev": "node server.js"
+  "devDependencies": {
+    "nodemon": "^3.1.10"
   }
 }
