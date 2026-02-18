@@ -3,7 +3,8 @@ const cors = require('cors');
 const path = require('path');
 const dotenv = require('dotenv');
 
-dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config(); 
+
 
 const adminRoutes = require('./admin/admin.routes');
 const adminNewsletterRoutes = require('./routes/adminNewsletter');
@@ -38,9 +39,26 @@ app.use('/api/search', searchRoutes);
 app.use('/api/admin/newsletter', adminNewsletterRoutes);
 app.use('/api/admin', adminRoutes);
 
+const db = require("./db");
+
+app.get("/api/db-check", async (_req, res) => {
+  try {
+    const [rows] = await db.query("SELECT 1 AS ok");
+    res.json({ ok: true, rows });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err.message,
+      code: err.code,
+    });
+  }
+});
+
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
   newsletterService.resumePendingCampaigns().catch((err) => {
     console.error('Failed to resume pending newsletter campaigns:', err);
   });
 });
+// 

@@ -3,7 +3,7 @@ const path = require('path');
 const dotenv = require('dotenv');
 const mysql = require('mysql2/promise');
 
-dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config()
 
 const parsePort = (value) => {
   const port = Number.parseInt(value, 10);
