@@ -5,15 +5,27 @@ const mysql = require('mysql2/promise');
 
 dotenv.config({ path: path.join(__dirname, '.env') });
 
-const pool = mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
+const parsePort = (value) => {
+  const port = Number.parseInt(value, 10);
+  return Number.isInteger(port) && port > 0 ? port : undefined;
+};
+
+const poolConfig = {
+  host: process.env.DB_HOST || process.env.MYSQLHOST,
+  user: process.env.DB_USER || process.env.MYSQLUSER,
+  password: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD,
+  database: process.env.DB_NAME || process.env.MYSQLDATABASE,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-});
+};
+
+const resolvedPort = parsePort(process.env.DB_PORT || process.env.MYSQLPORT);
+if (resolvedPort) {
+  poolConfig.port = resolvedPort;
+}
+
+const pool = mysql.createPool(poolConfig);
 
 // Test connection immediately
 (async () => {

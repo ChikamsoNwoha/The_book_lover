@@ -1,6 +1,6 @@
 # The Book Lover
 
-Last verified: February 17, 2026.
+Last verified: February 18, 2026.
 
 The Book Lover is a blog-style platform with:
 - A public reader experience (articles, likes, comments, search).
@@ -88,7 +88,7 @@ EMAIL_PASS=optional_sender_password
 ```
 
 Variable notes:
-- `DB_PORT` exists in the template for compatibility, but `backend/db.js` currently does not read it.
+- `DB_PORT` is optional in most local setups (defaults to MySQL `3306` if omitted by the client library).
 - `EMAIL_USER` can be used as a fallback sender when `NEWSLETTER_FROM_EMAIL` is unset.
 - `EMAIL_PASS` is currently unused by backend code.
 - `RESEND_API_KEY` is required for newsletter sends.
@@ -130,9 +130,129 @@ pnpm run dev
 
 Frontend default: `http://localhost:5173`
 
+## Railway Deployment (Backend + MySQL)
+
+This repo is ready for Railway backend deployment from GitHub:
+- `backend/railway.json` defines deploy behavior:
+  - start command: `node server.js`
+  - health check: `/api/health`
+  - watch path: `/backend/**`
+  - required mount path: `/app/uploads` (for persistent uploads)
+- `backend/.env.railway.example` contains a copy-paste variable template.
+
+### 1. Create Railway services
+
+1. Create a Railway project.
+2. Add a MySQL service (Railway template/plugin).
+3. Add a service from GitHub repo `ChikamsoNwoha/The_book_lover`.
+4. For that backend service:
+   - Set root directory to `/backend`.
+   - Set branch to `main`.
+   - Enable auto-deploy.
+5. Add a Railway Volume and mount it at `/app/uploads`.
+6. Generate a public domain for the backend service.
+
+### 2. Set backend variables in Railway
+
+Set these in the backend service Variables tab:
+
+```bash
+DB_HOST=${{MySQL.MYSQLHOST}}
+DB_USER=${{MySQL.MYSQLUSER}}
+DB_PASSWORD=${{MySQL.MYSQLPASSWORD}}
+DB_NAME=${{MySQL.MYSQLDATABASE}}
+DB_PORT=${{MySQL.MYSQLPORT}}
+JWT_SECRET=replace_with_a_long_random_string
+JWT_EXPIRES_IN=7d
+BASE_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}
+SITE_URL=http://localhost:5173
+RESEND_API_KEY=your_resend_api_key
+RESEND_WEBHOOK_SECRET=your_resend_webhook_secret
+NEWSLETTER_FROM_EMAIL=updates@your-domain.com
+NODE_ENV=production
+```
+
+Notes:
+- `SITE_URL` can stay `http://localhost:5173` until frontend is deployed.
+- `DB_*` values can come from either mapped `DB_*` vars or Railway `MYSQL*` vars; backend supports both.
+
+### 3. Import schema into Railway MySQL
+
+From your local machine:
+
+```bash
+mysql -h <MYSQLHOST> -P <MYSQLPORT> -u <MYSQLUSER> -p <MYSQLDATABASE> < backend/small_wins.sql
+```
+
+### 4. Seed admin
+
+Generate hash:
+
+```bash
+node backend/hash.js "YourPassword"
+```
+
+Insert admin:
+
+```sql
+INSERT INTO admins (name, email, password_hash, is_active)
+VALUES ('Admin', 'admin@example.com', '<HASH_FROM_STEP_1>', 1);
+```
+
+### 5. Configure Resend webhook
+
+In Resend, add webhook URL:
+
+```text
+https://<your-backend-domain>/api/newsletter/webhooks/resend
+```
+
+Enable events:
+- `delivered`
+- `opened`
+- `clicked`
+- `bounced`
+- `complained`
+
+### 6. Validate deployment
+
+Manual checks:
+
+```bash
+curl -i https://<your-backend-domain>/api/health
+curl -i https://<your-backend-domain>/api/admin/overview
+curl -i -X POST https://<your-backend-domain>/api/newsletter/send
+```
+
+Expected:
+- `/api/health` -> `200`
+- `/api/admin/overview` -> `401` (without token)
+- `POST /api/newsletter/send` -> `410`
+
+Automated smoke check against production:
+
+```bash
+cd backend
+API_BASE_URL=https://<your-backend-domain> pnpm run smoke:admin
+```
+
+PowerShell:
+
+```powershell
+cd backend
+$env:API_BASE_URL="https://<your-backend-domain>"
+pnpm run smoke:admin
+```
+
+### 7. Later, when frontend is deployed
+
+1. Set frontend `VITE_API_BASE_URL=https://<your-backend-domain>`.
+2. Update backend `SITE_URL` to the frontend production URL.
+
 ## Script Reference
 
 Backend (`backend/package.json`):
+- `pnpm run start` -> production start (`node server.js`)
 - `pnpm run dev` -> start backend with `node server.js`
 - `pnpm run dev:watch` -> start backend with auto-reload (`nodemon`)
 - `pnpm run smoke:admin` -> smoke checks for health/admin/newsletter legacy status
