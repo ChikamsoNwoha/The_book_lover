@@ -18,7 +18,12 @@ const app = express();
 const port = parseInt(process.env.PORT, 10) || 5000;
 app.set('trust proxy', true);
 
-app.use(cors());
+app.use(
+  cors({
+    origin: process.env.SITE_URL || "http://localhost:5173",
+  })
+);
+
 app.use(
   express.json({
     verify: (req, _res, buffer) => {

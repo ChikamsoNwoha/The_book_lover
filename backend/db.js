@@ -14,7 +14,7 @@ const poolConfig = {
   host: process.env.DB_HOST || process.env.MYSQLHOST,
   user: process.env.DB_USER || process.env.MYSQLUSER,
   password: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD,
-  database: process.env.DB_NAME || process.env.MYSQLDATABASE,
+  database: process.env.DB_NAME || process.env.MYSQLDATABASE || process.env.MYSQL_DATABASE,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
