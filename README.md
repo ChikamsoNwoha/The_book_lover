@@ -1,409 +1,181 @@
 # The Book Lover
 
-Last verified: February 18, 2026.
+## What This App Is
+The Book Lover is a full-stack blog platform with:
+- Public reading features (stories, search, likes, comments, newsletter signup).
+- A protected admin area for managing articles, comment moderation, and newsletter campaigns.
 
-The Book Lover is a blog-style platform with:
-- A public reader experience (articles, likes, comments, search).
-- A protected admin area (article publishing, comment moderation, newsletter operations).
+## Tech Stack
+- Frontend: React 19, Vite 7, TypeScript, React Router 7, Tailwind CSS 4
+- Backend: Node.js, Express 4, MySQL 8 (`mysql2`)
+- Auth: JWT + bcrypt (admin routes)
+- Email/Newsletter: Resend (campaign + webhook tracking)
+- Hosting: Vercel (frontend), Railway (backend + MySQL)
 
-The frontend is a React + Vite app, and the backend is an Express API backed by MySQL.
+## Live URLs
+- Frontend: `https://the-small-wins.vercel.app`
+- Backend API base: `https://thebooklover-production.up.railway.app`
 
-## Stack
+## Architecture
+`Vercel (frontend) -> Railway (Express backend) -> Railway MySQL`
 
-- Frontend: React 19, Vite 7, Tailwind CSS 4, React Router 7
-- Backend: Node.js, Express 4, MySQL 8
-- Email/newsletter delivery: Resend
+The frontend reads `VITE_API_BASE_URL` and sends API requests to the Railway backend.
 
-## Prerequisites
-
-- Node.js `20.19+` (or `22.12+`)
-- MySQL `8+`
-- pnpm (enable with `corepack enable`)
-
-Notes:
-- Backend runtime itself can run on older Node versions, but the frontend toolchain (`vite@7` and `@vitejs/plugin-react@5`) requires Node 20.19+.
-- Run commands from the repository root unless stated otherwise.
-
-## Project Structure
-
-```text
-.
-|- backend/      # Express API, DB access, newsletter processing
-|- frontend/     # React + Vite SPA
-|- README.md
-```
-
-## Quick Start
-
-Open two terminals from the repo root.
-
+## Local Setup
 ### 1. Install dependencies
+Run these from the repository root:
 
 ```bash
 cd backend
 pnpm install
+cd ../frontend
+pnpm install
+```
+
+### 2. Configure environment files
+- Create `backend/.env` using `backend/.env.example`.
+- Create `frontend/.env` using `frontend/.env.example`.
+
+### 3. Create and seed database
+Create the database, then import schema:
+
+```bash
+mysql -u <db_user> -p -e "CREATE DATABASE small_wins;"
+mysql -u <db_user> -p small_wins < backend/small_wins.sql
+```
+
+### 4. Run backend and frontend
+Use two terminals:
+
+```bash
+cd backend
+pnpm run dev
 ```
 
 ```bash
 cd frontend
-pnpm install
+pnpm run dev
 ```
 
-### 2. Create the database and import schema
+Default local URLs:
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:5000`
+
+## Deploy Notes
+### Frontend (Vercel)
+- Root directory: `frontend`
+- Build command: `pnpm run build`
+- Output directory: `dist`
+- Required environment variable:
 
 ```bash
-mysql -u your_db_user -p
-CREATE DATABASE small_wins;
-EXIT;
+VITE_API_BASE_URL=https://thebooklover-production.up.railway.app
 ```
 
-```bash
-mysql -u your_db_user -p small_wins < backend/small_wins.sql
-```
+- SPA route rewrites are configured in `frontend/vercel.json`.
 
-Schema notes:
-- `backend/small_wins.sql` already includes newsletter tracking tables.
-- `backend/migrations/2026-02-17-newsletter-tracking.sql` is only for upgrading older databases that predate that schema change.
-- Legacy safety: missing `comment_replies` / newsletter tables are also auto-created by backend utilities at runtime.
+### Backend (Railway)
+- Root directory: `backend`
+- Start command: `node server.js`
+- Health check: `/api/health`
+- Add a Railway volume mounted at `/app/uploads`.
 
-### 3. Configure backend environment
-
-Create `backend/.env` from `backend/.env.example`, then set real values:
+Required backend variables:
 
 ```bash
-DB_HOST=localhost
-DB_USER=your_db_user
-DB_PASSWORD=your_db_password
-DB_NAME=small_wins
-DB_PORT=3306
-JWT_SECRET=replace_with_a_long_random_string
+NODE_ENV=production
+BASE_URL=https://thebooklover-production.up.railway.app
+SITE_URL=https://the-small-wins.vercel.app
+
+JWT_SECRET=replace_with_long_random_string
 JWT_EXPIRES_IN=7d
-BASE_URL=http://localhost:5000
-SITE_URL=http://localhost:5173
+
+DB_HOST=${{MySQL.MYSQLHOST}}
+DB_PORT=${{MySQL.MYSQLPORT}}
+DB_USER=${{MySQL.MYSQLUSER}}
+DB_PASSWORD=${{MySQL.MYSQLPASSWORD}}
+DB_NAME=${{MySQL.MYSQLDATABASE}}
+
 RESEND_API_KEY=your_resend_api_key
 RESEND_WEBHOOK_SECRET=your_resend_webhook_secret
 NEWSLETTER_FROM_EMAIL=updates@your-domain.com
+
 EMAIL_USER=optional_sender_fallback@example.com
 EMAIL_PASS=optional_sender_password
 ```
 
-Variable notes:
-- `DB_PORT` is optional in most local setups (defaults to MySQL `3306` if omitted by the client library).
-- `EMAIL_USER` can be used as a fallback sender when `NEWSLETTER_FROM_EMAIL` is unset.
-- `EMAIL_PASS` is currently unused by backend code.
-- `RESEND_API_KEY` is required for newsletter sends.
-- `RESEND_WEBHOOK_SECRET` is required if webhook verification is enabled for delivery tracking.
-
-### 4. Start backend
-
-```bash
-cd backend
-pnpm run dev
-```
-
-Optional watch mode:
-
-```bash
-cd backend
-pnpm run dev:watch
-```
-
-Backend defaults:
-- API base: `http://localhost:5000`
-- Health endpoint: `GET http://localhost:5000/api/health`
-- Static uploads: `http://localhost:5000/uploads/*`
-
-### 5. Start frontend
-
-Optional override in `frontend/.env`:
-
-```bash
-VITE_API_BASE_URL=http://localhost:5000
-```
-
-Run:
-
-```bash
-cd frontend
-pnpm run dev
-```
-
-Frontend default: `http://localhost:5173`
-
-## Railway Deployment (Backend + MySQL)
-
-This repo is ready for Railway backend deployment from GitHub:
-- `backend/railway.json` defines deploy behavior:
-  - start command: `node server.js`
-  - health check: `/api/health`
-  - watch path: `/backend/**`
-  - required mount path: `/app/uploads` (for persistent uploads)
-- `backend/.env.railway.example` contains a copy-paste variable template.
-
-### 1. Create Railway services
-
-1. Create a Railway project.
-2. Add a MySQL service (Railway template/plugin).
-3. Add a service from GitHub repo `ChikamsoNwoha/The_book_lover`.
-4. For that backend service:
-   - Set root directory to `/backend`.
-   - Set branch to `main`.
-   - Enable auto-deploy.
-5. Add a Railway Volume and mount it at `/app/uploads`.
-6. Generate a public domain for the backend service.
-
-### 2. Set backend variables in Railway
-
-Set these in the backend service Variables tab:
-
-```bash
-DB_HOST=${{MySQL.MYSQLHOST}}
-DB_USER=${{MySQL.MYSQLUSER}}
-DB_PASSWORD=${{MySQL.MYSQLPASSWORD}}
-DB_NAME=${{MySQL.MYSQLDATABASE}}
-DB_PORT=${{MySQL.MYSQLPORT}}
-JWT_SECRET=replace_with_a_long_random_string
-JWT_EXPIRES_IN=7d
-BASE_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}
-SITE_URL=http://localhost:5173
-RESEND_API_KEY=your_resend_api_key
-RESEND_WEBHOOK_SECRET=your_resend_webhook_secret
-NEWSLETTER_FROM_EMAIL=updates@your-domain.com
-NODE_ENV=production
-```
+Railway MySQL generated variables (reference-only, from Railway):
+- `MYSQLHOST`
+- `MYSQLPORT`
+- `MYSQLUSER`
+- `MYSQLPASSWORD`
+- `MYSQLDATABASE`
+- `MYSQL_DATABASE`
+- `MYSQL_URL`
+- `MYSQL_PUBLIC_URL`
+- `MYSQL_ROOT_PASSWORD`
 
 Notes:
-- `SITE_URL` can stay `http://localhost:5173` until frontend is deployed.
-- `DB_*` values can come from either mapped `DB_*` vars or Railway `MYSQL*` vars; backend supports both.
+- `SITE_URL` must include protocol (`https://...`) for CORS.
+- Backend supports either `DB_*` vars or direct `MYSQL*` aliases.
 
-### 3. Import schema into Railway MySQL
+## Key Routes (Backend + Frontend Connections)
+| Method | Path | What it does | Frontend connection |
+| --- | --- | --- | --- |
+| GET | `/api/health` | Health check response (`{ ok: true }`) | Not directly called by frontend |
+| GET | `/api/db-check` | Tests live DB query connectivity | Not directly called by frontend |
+| GET | `/api/articles` | Returns paginated articles list | `frontend/src/Pages/StoryCard.tsx`, `frontend/src/admin/ArticlesManager.tsx` |
+| GET | `/api/articles/category/:category` | Returns paginated category-filtered articles | `frontend/src/Pages/StoryCard.tsx` |
+| GET | `/api/articles/stats` | Returns likes/comments counts per article ID | `frontend/src/Pages/StoryCard.tsx` |
+| GET | `/api/articles/:id` | Returns one article by ID and increments views | `frontend/src/Pages/StoryDetail.tsx` |
+| POST | `/api/articles` | Creates article (admin JWT, optional image/newsletter queue) | `frontend/src/admin/ArticlesManager.tsx` |
+| PUT | `/api/articles/:id` | Updates article (admin JWT, image replace/remove support) | `frontend/src/admin/ArticlesManager.tsx` |
+| DELETE | `/api/articles/:id` | Deletes article (admin JWT) | `frontend/src/admin/ArticlesManager.tsx` |
+| POST | `/api/interactions/view/:id` | Increments article views counter | Not directly called by frontend |
+| POST | `/api/interactions/like/:id` | Registers like by client IP (duplicate-protected) | `frontend/src/lib/likes.tsx` |
+| GET | `/api/interactions/likes/:id` | Returns like count for one article | `frontend/src/Pages/StoryDetail.tsx` |
+| POST | `/api/interactions/comment/:id` | Creates comment for one article | `frontend/src/Pages/StoryDetail.tsx` |
+| GET | `/api/interactions/comments/:id` | Returns comments (and admin reply if present) | `frontend/src/Pages/StoryDetail.tsx` |
+| POST | `/api/newsletter/subscribe` | Adds subscriber and sends verification email | `frontend/src/components/Footer.tsx` |
+| GET | `/api/newsletter/verify/:token` | Verifies subscriber token from email link | Email link flow (not a frontend API call) |
+| GET | `/api/newsletter/unsubscribe/:token` | Unsubscribes via tokenized email link | Email link flow (not a frontend API call) |
+| POST | `/api/newsletter/send` | Legacy endpoint, now returns `410 Gone` | Not directly called by frontend |
+| POST | `/api/newsletter/webhooks/resend` | Receives/validates Resend webhook events | Resend webhook integration only |
+| GET | `/api/search` | Fulltext article search (`q`, `offset`) | `frontend/src/components/Navbar.tsx` |
+| POST | `/api/admin/login` | Admin login; returns JWT token | `frontend/src/admin/AdminLogin.tsx` |
+| GET | `/api/admin/overview` | Dashboard totals + latest comments (admin JWT) | `frontend/src/admin/AdminOverview.tsx` |
+| GET | `/api/admin/dashboard` | Alias of overview response (admin JWT) | Not directly called by frontend |
+| GET | `/api/admin/comments` | Paged comments list for moderation (admin JWT) | `frontend/src/admin/CommentsManager.tsx` |
+| DELETE | `/api/admin/comments/:id` | Deletes comment (admin JWT) | `frontend/src/admin/CommentsManager.tsx` |
+| PUT | `/api/admin/comments/:id/reply` | Creates/updates admin reply to comment (admin JWT) | `frontend/src/admin/CommentsManager.tsx` |
+| DELETE | `/api/admin/comments/:id/reply` | Deletes admin reply (admin JWT) | `frontend/src/admin/CommentsManager.tsx` |
+| GET | `/api/admin/newsletter/summary` | Newsletter audience + aggregate campaign metrics (admin JWT) | `frontend/src/admin/NewsletterManager.tsx` |
+| GET | `/api/admin/newsletter/campaigns` | Lists newsletter campaigns with filters (admin JWT) | `frontend/src/admin/NewsletterManager.tsx` |
+| GET | `/api/admin/newsletter/campaigns/:id/deliveries` | Lists recipient-level delivery events for campaign (admin JWT) | `frontend/src/admin/NewsletterManager.tsx` |
+| POST | `/api/admin/newsletter/campaigns` | Creates manual or auto-article newsletter campaign (admin JWT) | `frontend/src/admin/NewsletterManager.tsx`, `frontend/src/admin/ArticlesManager.tsx` (auto-article option via article create) |
 
-From your local machine:
-
-```bash
-mysql -h <MYSQLHOST> -P <MYSQLPORT> -u <MYSQLUSER> -p <MYSQLDATABASE> < backend/small_wins.sql
-```
-
-### 4. Seed admin
-
-Generate hash:
-
-```bash
-node backend/hash.js "YourPassword"
-```
-
-Insert admin:
-
-```sql
-INSERT INTO admins (name, email, password_hash, is_active)
-VALUES ('Admin', 'admin@example.com', '<HASH_FROM_STEP_1>', 1);
-```
-
-### 5. Configure Resend webhook
-
-In Resend, add webhook URL:
-
+## Folder Structure
 ```text
-https://<your-backend-domain>/api/newsletter/webhooks/resend
+.
+|- backend/
+|  |- admin/                 # Admin auth + moderation routes
+|  |- routes/                # Public/admin API route modules
+|  |- services/              # Newsletter processing + Resend integration
+|  |- utils/                 # DB table bootstrapping helpers
+|  |- migrations/            # SQL migrations
+|  |- .env.example
+|  |- .env.railway.example
+|  |- railway.json
+|  `- server.js
+|- frontend/
+|  |- src/
+|  |  |- Pages/              # Public pages
+|  |  |- admin/              # Admin dashboard UI
+|  |  |- components/         # Shared UI components
+|  |  `- lib/                # API client + utility hooks
+|  |- .env.example
+|  |- vercel.json
+|  `- vite.config.ts
+|- CONTRIBUTING.md
+`- README.md
 ```
-
-Enable events:
-- `delivered`
-- `opened`
-- `clicked`
-- `bounced`
-- `complained`
-
-### 6. Validate deployment
-
-Manual checks:
-
-```bash
-curl -i https://<your-backend-domain>/api/health
-curl -i https://<your-backend-domain>/api/admin/overview
-curl -i -X POST https://<your-backend-domain>/api/newsletter/send
-```
-
-Expected:
-- `/api/health` -> `200`
-- `/api/admin/overview` -> `401` (without token)
-- `POST /api/newsletter/send` -> `410`
-
-Automated smoke check against production:
-
-```bash
-cd backend
-API_BASE_URL=https://<your-backend-domain> pnpm run smoke:admin
-```
-
-PowerShell:
-
-```powershell
-cd backend
-$env:API_BASE_URL="https://<your-backend-domain>"
-pnpm run smoke:admin
-```
-
-### 7. Later, when frontend is deployed
-
-1. Set frontend `VITE_API_BASE_URL=https://<your-backend-domain>`.
-2. Update backend `SITE_URL` to the frontend production URL.
-
-## Script Reference
-
-Backend (`backend/package.json`):
-- `pnpm run start` -> production start (`node server.js`)
-- `pnpm run dev` -> start backend with `node server.js`
-- `pnpm run dev:watch` -> start backend with auto-reload (`nodemon`)
-- `pnpm run smoke:admin` -> smoke checks for health/admin/newsletter legacy status
-
-Frontend (`frontend/package.json`):
-- `pnpm run dev` -> start Vite dev server
-- `pnpm run build` -> production build
-- `pnpm run preview` -> preview production build
-- `pnpm run lint` -> run ESLint
-
-## Admin Setup
-
-### 1. Create password hash
-
-Cross-platform:
-
-```bash
-node backend/hash.js "YourPassword"
-```
-
-PowerShell alternative:
-
-```powershell
-$env:ADMIN_PASSWORD="YourPassword"
-node backend/hash.js
-```
-
-### 2. Insert admin record
-
-```sql
-INSERT INTO admins (name, email, password_hash, is_active)
-VALUES ('Admin', 'admin@example.com', '<HASH_FROM_STEP_1>', 1);
-```
-
-### 3. Sign in
-
-- URL: `http://localhost:5173/admin`
-
-Canonical admin URLs:
-- `http://localhost:5173/admin`
-- `http://localhost:5173/admin/dashboard`
-- `http://localhost:5173/admin/dashboard/articles`
-- `http://localhost:5173/admin/dashboard/comments`
-- `http://localhost:5173/admin/dashboard/newsletter`
-
-Compatibility redirects:
-- `/admin/dashboard/overview` -> `/admin/dashboard`
-- `/admin/articles` -> `/admin/dashboard/articles`
-- `/admin/comments` -> `/admin/dashboard/comments`
-- `/admin/newsletter` -> `/admin/dashboard/newsletter`
-- Unknown `/admin/*` -> `/admin/dashboard`
-
-## API Overview
-
-### Public APIs
-
-- `GET /api/health`
-- `GET /api/articles`
-- `GET /api/articles/category/:category`
-- `GET /api/articles/stats`
-- `GET /api/articles/:id`
-- `POST /api/interactions/view/:id`
-- `POST /api/interactions/like/:id`
-- `GET /api/interactions/likes/:id`
-- `POST /api/interactions/comment/:id`
-- `GET /api/interactions/comments/:id`
-- `GET /api/search?q=...`
-- `POST /api/newsletter/subscribe`
-- `GET /api/newsletter/verify/:token`
-- `GET /api/newsletter/unsubscribe/:token`
-- `POST /api/newsletter/webhooks/resend`
-- `POST /api/newsletter/send` (legacy, returns `410 Gone`)
-
-### Admin APIs (JWT required except login)
-
-- `POST /api/admin/login`
-- `GET /api/admin/overview`
-- `GET /api/admin/dashboard`
-- `GET /api/admin/comments`
-- `DELETE /api/admin/comments/:id`
-- `PUT /api/admin/comments/:id/reply`
-- `DELETE /api/admin/comments/:id/reply`
-- `GET /api/admin/newsletter/summary`
-- `GET /api/admin/newsletter/campaigns`
-- `GET /api/admin/newsletter/campaigns/:id/deliveries`
-- `POST /api/admin/newsletter/campaigns`
-- `POST /api/articles` (admin-auth)
-- `PUT /api/articles/:id` (admin-auth)
-- `DELETE /api/articles/:id` (admin-auth)
-
-## Newsletter Tracking and Webhooks
-
-### Behavior
-
-- Campaign sends are queued and processed in-process (non-blocking).
-- Campaigns stuck in `QUEUED` or `SENDING` are resumed on backend startup.
-- Auto-send can be toggled from Admin -> Articles while publishing.
-
-### Resend webhook setup
-
-1. In Resend, create webhook:
-   - URL: `https://your-domain.com/api/newsletter/webhooks/resend`
-2. Subscribe to events:
-   - `delivered`
-   - `opened`
-   - `clicked`
-   - `bounced`
-   - `complained`
-3. Put secret in `RESEND_WEBHOOK_SECRET`.
-4. Ensure:
-   - `BASE_URL` is your backend public URL.
-   - `SITE_URL` is your frontend public URL.
-
-## Smoke Checks
-
-Automated:
-
-```bash
-cd backend
-pnpm run smoke:admin
-```
-
-Manual quick checks:
-
-```bash
-curl -i http://localhost:5000/api/health
-curl -i http://localhost:5000/api/admin/overview
-curl -i http://localhost:5000/api/admin/dashboard
-curl -i -X POST http://localhost:5000/api/newsletter/send
-```
-
-Expected statuses:
-- `/api/health` -> `200`
-- `/api/admin/overview` -> `401` (without token)
-- `/api/admin/dashboard` -> `401` (without token)
-- `POST /api/newsletter/send` -> `410`
-
-## Backend Restart Expectations
-
-- If using `pnpm run dev` (`node server.js`), restart manually when backend files change.
-- If using `pnpm run dev:watch` (`nodemon`), backend changes auto-reload.
-
-## Troubleshooting
-
-- `401` on admin endpoints:
-  - Expected unless you send `Authorization: Bearer <jwt>`.
-- Verification/unsubscribe links point to wrong host:
-  - Set `BASE_URL` correctly.
-- "Failed to fetch" from frontend:
-  - Confirm backend is running and `VITE_API_BASE_URL` matches backend URL.
-- Vite refuses to start due Node version:
-  - Upgrade Node to `20.19+` or `22.12+`.
-- Newsletter send fails:
-  - Confirm `RESEND_API_KEY` and sender email (`NEWSLETTER_FROM_EMAIL` or `EMAIL_USER`) are set.

@@ -38,6 +38,23 @@ VITE_API_BASE_URL=http://localhost:5000
 
 If omitted, frontend API requests default to `http://localhost:5000`.
 
+## Deploy on Vercel
+
+1. Import this repository into Vercel.
+2. Set Root Directory to `frontend`.
+3. Set environment variable:
+
+```bash
+VITE_API_BASE_URL=https://thebooklover-production.up.railway.app
+```
+
+4. Keep build settings:
+   - Framework: `Vite`
+   - Build command: `pnpm run build`
+   - Output directory: `dist`
+
+`frontend/vercel.json` is included to rewrite all routes to `index.html` so React Router paths work on refresh.
+
 ## Scripts
 
 - `pnpm run dev` - start Vite dev server
